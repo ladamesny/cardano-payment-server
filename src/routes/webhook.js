@@ -17,6 +17,43 @@ const validatePaymentRequest = (req, res, next) => {
   next();
 };
 
+// Add new draft order endpoint
+router.post('/create-draft-order', async (req, res) => {
+  try {
+    const { cart, total, ada_amount } = req.body;
+
+    if (!cart || !total || !ada_amount) {
+      return res.status(400).json({
+        error:
+          'Missing required fields: cart, total, and ada_amount are required',
+      });
+    }
+
+    // Create draft order
+    const draftOrder = await shopify.draftOrder.create({
+      line_items: cart.items.map((item) => ({
+        variant_id: item.variant_id,
+        quantity: item.quantity,
+      })),
+      note: `Payment pending - ADA Amount: ${ada_amount}`,
+      financial_status: 'pending',
+    });
+
+    console.log(`Created draft order: ${draftOrder.order_number}`);
+
+    res.json({
+      success: true,
+      order_number: draftOrder.order_number,
+    });
+  } catch (error) {
+    console.error('Error creating draft order:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
 // Payment webhook endpoint
 router.post('/payment', validatePaymentRequest, async (req, res) => {
   const { order_id, transaction_hash, ada_amount, usd_amount } = req.body;
