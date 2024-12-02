@@ -39,7 +39,7 @@ router.post('/create-draft-order', async (req, res) => {
       city: customer.city,
       province: customer.state,
       zip: customer.zip,
-      country: customer.country,
+      country_code: 'US',
       phone: customer.phone,
     };
 
@@ -47,11 +47,19 @@ router.post('/create-draft-order', async (req, res) => {
     const draftOrderPayload = {
       draft_order: {
         line_items: cart.items.map((item) => ({
-          variant_id: item.variant_id,
-          quantity: item.quantity,
-          price: (item.price / 100).toFixed(2),
+          variant_id: parseInt(item.variant_id),
+          quantity: parseInt(item.quantity),
+          applied_discount: {
+            value_type: 'fixed_amount',
+            value: '0.00',
+            amount: '0.00',
+          },
         })),
-        email: customer.email,
+        customer: {
+          email: customer.email,
+          first_name: customer.firstName,
+          last_name: customer.lastName,
+        },
         shipping_address: shippingAddress,
         billing_address: shippingAddress,
         note_attributes: [
@@ -86,12 +94,8 @@ router.post('/create-draft-order', async (req, res) => {
   } catch (error) {
     console.error('Error creating draft order:', error);
     // Log the full error response if available
-    if (error.response) {
-      console.error('Shopify error response:', {
-        message: error.message,
-        status: error.response.status,
-        data: error.response.data,
-      });
+    if (error.response?.data) {
+      console.error('Shopify error details:', error.response.data);
     }
     res.status(500).json({
       error: 'Failed to create draft order',
