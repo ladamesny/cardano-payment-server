@@ -50,8 +50,12 @@ async function verifyTransaction(txHash, expectedAmount) {
     // Convert ADA to Lovelace
     const lovelaceAmount = Math.floor(expectedAmount * 1000000);
 
+    // Get the transaction UTxOs
+    const utxos = await blockfrost.txsUtxos(txHash);
+    console.log('Transaction UTXOs:', utxos);
+
     // Verify the transaction outputs
-    const validPayment = transaction.outputs.some(
+    const validPayment = utxos.outputs.some(
       (output) =>
         output.address === process.env.CARDANO_WALLET_ADDRESS &&
         output.amount.find((amt) => amt.unit === 'lovelace')?.quantity >=
