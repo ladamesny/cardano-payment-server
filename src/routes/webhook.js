@@ -70,6 +70,18 @@ router.post('/create-draft-order', async (req, res) => {
     }
 
     // Now create the draft order
+    const addressInfo = {
+      first_name: customer.firstName,
+      last_name: customer.lastName,
+      address1: customer.address1,
+      address2: customer.address2 || '',
+      city: customer.city,
+      province: customer.state,
+      zip: customer.zip,
+      country_code: 'US',
+      phone: customer.phone,
+    };
+
     const draftOrderPayload = {
       draft_order: {
         line_items: cart.items.map((item) => ({
@@ -79,17 +91,8 @@ router.post('/create-draft-order', async (req, res) => {
         customer: {
           id: customerResponse.id,
         },
-        shipping_address: {
-          first_name: customer.firstName,
-          last_name: customer.lastName,
-          address1: customer.address1,
-          address2: customer.address2 || '',
-          city: customer.city,
-          province: customer.state,
-          zip: customer.zip,
-          country: 'United States',
-          phone: customer.phone,
-        },
+        shipping_address: addressInfo,
+        billing_address: addressInfo,
         note_attributes: [
           {
             name: 'wallet_address',
@@ -105,6 +108,9 @@ router.post('/create-draft-order', async (req, res) => {
           },
         ],
         tags: ['ADA Payment'],
+        use_customer_default_address: false,
+        send_receipt: false,
+        email: customer.email,
       },
     };
 
