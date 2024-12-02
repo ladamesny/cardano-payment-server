@@ -31,37 +31,19 @@ router.post('/create-draft-order', async (req, res) => {
     const draftOrderPayload = {
       draft_order: {
         line_items: cart.items.map((item) => ({
-          title: item.title || 'Product',
           variant_id: parseInt(item.variant_id),
           quantity: parseInt(item.quantity),
-          requires_shipping: true,
-          price: formatPrice(item.price), // Convert cents to dollars
-          applied_discount: {
-            value_type: 'fixed_amount',
-            value: '0.00',
-            amount: '0.00',
-            title: 'No Discount',
-          },
         })),
-        customer: {
-          email: customer.email,
-          accepts_marketing: false,
-        },
-        use_customer_default_address: false,
-        currency: 'USD',
-        taxes_included: false,
-        tax_exempt: false,
-        presentment_currency: 'USD',
-        note_attributes: [
-          {
-            name: 'source',
-            value: 'ada_payment',
-          },
-        ],
-        shipping_line: {
-          custom: true,
-          title: 'Standard Shipping',
-          price: '0.00',
+        shipping_address: {
+          first_name: customer.firstName,
+          last_name: customer.lastName,
+          address1: customer.address1,
+          address2: customer.address2 || '',
+          city: customer.city,
+          province: customer.state,
+          zip: customer.zip,
+          country_code: 'US',
+          phone: customer.phone,
         },
       },
     };
@@ -71,30 +53,44 @@ router.post('/create-draft-order', async (req, res) => {
       JSON.stringify(draftOrderPayload, null, 2)
     );
 
-    try {
-      const draftOrder = await shopify.draftOrder.create(draftOrderPayload);
-      console.log('Draft order response:', JSON.stringify(draftOrder, null, 2));
+    // Make direct REST API call
+    const shopName = process.env.SHOPIFY_SHOP_NAME;
+    const accessToken = process.env.SHOPIFY_ACCESS_TOKEN;
 
-      res.json({
-        order_id: draftOrder.id,
-        status: 'success',
+    const response = await fetch(
+      `https://${shopName}/admin/api/2024-01/draft_orders.json`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shopify-Access-Token': accessToken,
+        },
+        body: JSON.stringify(draftOrderPayload),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error('Shopify API Error:', {
+        status: response.status,
+        statusText: response.statusText,
+        data,
       });
-    } catch (shopifyError) {
-      // Try to get the actual error message
-      const errorBody = shopifyError.response?.body;
-      console.error('Shopify API Error Details:', {
-        message: shopifyError.message,
-        body: typeof errorBody === 'string' ? JSON.parse(errorBody) : errorBody,
-        status: shopifyError.status,
-      });
-      throw shopifyError;
+      throw new Error(`Shopify API error: ${JSON.stringify(data)}`);
     }
+
+    console.log('Draft order created successfully:', data);
+
+    res.json({
+      order_id: data.draft_order.id,
+      status: 'success',
+    });
   } catch (error) {
     console.error('Error in create-draft-order:', error);
     res.status(500).json({
       error: 'Failed to process order',
       details: error.message,
-      apiError: error.response?.body,
     });
   }
 });
