@@ -49,6 +49,7 @@ router.post('/create-draft-order', async (req, res) => {
         line_items: cart.items.map((item) => ({
           variant_id: item.variant_id,
           quantity: item.quantity,
+          price: (item.price / 100).toFixed(2),
         })),
         email: customer.email,
         shipping_address: shippingAddress,
@@ -69,6 +70,7 @@ router.post('/create-draft-order', async (req, res) => {
         ],
         tags: ['ADA Payment'],
         use_customer_default_address: false,
+        currency: 'USD',
       },
     };
 
@@ -87,7 +89,6 @@ router.post('/create-draft-order', async (req, res) => {
     if (error.response) {
       console.error('Shopify error response:', {
         message: error.message,
-        response: error.response,
         status: error.response.status,
         data: error.response.data,
       });
