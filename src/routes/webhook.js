@@ -34,6 +34,12 @@ router.post('/create-draft-order', async (req, res) => {
           variant_id: parseInt(item.variant_id),
           quantity: parseInt(item.quantity),
         })),
+        email: customer.email,
+        customer: {
+          email: customer.email,
+          first_name: customer.firstName,
+          last_name: customer.lastName,
+        },
         shipping_address: {
           first_name: customer.firstName,
           last_name: customer.lastName,
