@@ -22,36 +22,54 @@ router.post('/create-draft-order', async (req, res) => {
   try {
     const { cart, total, ada_amount, ada_price, customer } = req.body;
 
-    // First, create the customer using REST API
-    const customerPayload = {
-      customer: {
-        email: customer.email,
-        phone: customer.phone,
-        first_name: customer.firstName,
-        last_name: customer.lastName,
-        addresses: [
-          {
-            address1: customer.address1,
-            address2: customer.address2 || '',
-            city: customer.city,
-            province: customer.state,
-            zip: customer.zip,
-            country: 'US',
-            phone: customer.phone,
-          },
-        ],
-      },
-    };
+    // First try to find if customer exists
+    let customerResponse;
+    try {
+      const customers = await shopify.customer.search({
+        query: `email:${customer.email}`,
+      });
+      customerResponse = customers[0];
+    } catch (error) {
+      console.log(
+        'Customer search failed, will create new customer:',
+        error.message
+      );
+    }
 
-    console.log(
-      'Creating customer with payload:',
-      JSON.stringify(customerPayload, null, 2)
-    );
+    // If customer doesn't exist, create them
+    if (!customerResponse) {
+      const customerPayload = {
+        customer: {
+          email: customer.email,
+          first_name: customer.firstName,
+          last_name: customer.lastName,
+          phone: customer.phone,
+          verified_email: true,
+          addresses: [
+            {
+              first_name: customer.firstName,
+              last_name: customer.lastName,
+              address1: customer.address1,
+              address2: customer.address2 || '',
+              city: customer.city,
+              province: customer.state,
+              zip: customer.zip,
+              country: 'United States',
+              phone: customer.phone,
+            },
+          ],
+        },
+      };
 
-    const customerResponse = await shopify.customer.create(customerPayload);
-    console.log('Customer creation response:', customerResponse);
+      console.log(
+        'Creating customer with payload:',
+        JSON.stringify(customerPayload, null, 2)
+      );
+      customerResponse = await shopify.customer.create(customerPayload);
+      console.log('Customer created:', customerResponse);
+    }
 
-    // Now create the draft order with the customer ID
+    // Now create the draft order
     const draftOrderPayload = {
       draft_order: {
         line_items: cart.items.map((item) => ({
@@ -69,7 +87,7 @@ router.post('/create-draft-order', async (req, res) => {
           city: customer.city,
           province: customer.state,
           zip: customer.zip,
-          country_code: 'US',
+          country: 'United States',
           phone: customer.phone,
         },
         note_attributes: [
@@ -94,7 +112,6 @@ router.post('/create-draft-order', async (req, res) => {
       'Creating draft order with payload:',
       JSON.stringify(draftOrderPayload, null, 2)
     );
-
     const draftOrder = await shopify.draftOrder.create(draftOrderPayload);
 
     console.log('Created draft order:', draftOrder.id);
