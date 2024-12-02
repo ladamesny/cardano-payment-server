@@ -39,7 +39,7 @@ router.post('/create-draft-order', async (req, res) => {
       financial_status: 'pending',
     });
 
-    console.log(`Draft order: ${draftOrder}`);
+    console.log('Draft order:', JSON.stringify(draftOrder, null, 2));
     console.log(`Created draft order: ${draftOrder.order_number}`);
 
     res.json({
