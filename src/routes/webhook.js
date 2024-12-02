@@ -3,8 +3,8 @@ const router = express.Router();
 const shopify = require('../config/shopify');
 const { verifyTransaction } = require('../services/blockfrost');
 
-// Middleware to validate request body
 const validatePaymentRequest = (req, res, next) => {
+  // Middleware to validate request body
   const { order_id, transaction_hash, ada_amount } = req.body;
 
   if (!order_id || !transaction_hash || !ada_amount) {
@@ -39,6 +39,7 @@ router.post('/create-draft-order', async (req, res) => {
       financial_status: 'pending',
     });
 
+    console.log(`Draft order: ${draftOrder}`);
     console.log(`Created draft order: ${draftOrder.order_number}`);
 
     res.json({
