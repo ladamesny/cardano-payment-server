@@ -22,95 +22,25 @@ router.post('/create-draft-order', async (req, res) => {
   try {
     const { cart, total, ada_amount, ada_price, customer } = req.body;
 
-    // First try to find if customer exists
-    let customerResponse;
-    try {
-      const customers = await shopify.customer.search({
-        query: `email:${customer.email}`,
-      });
-      customerResponse = customers[0];
-    } catch (error) {
-      console.log(
-        'Customer search failed, will create new customer:',
-        error.message
-      );
-    }
-
-    // If customer doesn't exist, create them
-    if (!customerResponse) {
-      const customerPayload = {
-        customer: {
-          email: customer.email,
-          first_name: customer.firstName,
-          last_name: customer.lastName,
-          phone: customer.phone,
-          verified_email: true,
-          addresses: [
-            {
-              first_name: customer.firstName,
-              last_name: customer.lastName,
-              address1: customer.address1,
-              address2: customer.address2 || '',
-              city: customer.city,
-              province: customer.state,
-              zip: customer.zip,
-              country: 'United States',
-              phone: customer.phone,
-            },
-          ],
-        },
-      };
-
-      console.log(
-        'Creating customer with payload:',
-        JSON.stringify(customerPayload, null, 2)
-      );
-      customerResponse = await shopify.customer.create(customerPayload);
-      console.log('Customer created:', customerResponse);
-    }
-
-    // Now create the draft order
-    const addressInfo = {
-      first_name: customer.firstName,
-      last_name: customer.lastName,
-      address1: customer.address1,
-      address2: customer.address2 || '',
-      city: customer.city,
-      province: customer.state,
-      zip: customer.zip,
-      country_code: 'US',
-      phone: customer.phone,
-    };
-
+    // Create a minimal draft order first
     const draftOrderPayload = {
       draft_order: {
         line_items: cart.items.map((item) => ({
           variant_id: parseInt(item.variant_id),
           quantity: parseInt(item.quantity),
         })),
-        customer: {
-          id: customerResponse.id,
-        },
-        shipping_address: addressInfo,
-        billing_address: addressInfo,
-        note_attributes: [
-          {
-            name: 'wallet_address',
-            value: customer.walletAddress,
-          },
-          {
-            name: 'ada_amount',
-            value: ada_amount.toString(),
-          },
-          {
-            name: 'ada_price',
-            value: ada_price.toString(),
-          },
-        ],
-        tags: ['ADA Payment'],
-        use_customer_default_address: false,
-        send_receipt: false,
         email: customer.email,
+        shipping_address: {
+          first_name: customer.firstName,
+          last_name: customer.lastName,
+          address1: customer.address1,
+          address2: customer.address2 || '',
+          city: customer.city,
+          province: customer.state,
+          zip: customer.zip,
+          country_code: 'US',
+          phone: customer.phone,
+        },
       },
     };
 
@@ -118,18 +48,43 @@ router.post('/create-draft-order', async (req, res) => {
       'Creating draft order with payload:',
       JSON.stringify(draftOrderPayload, null, 2)
     );
-    const draftOrder = await shopify.draftOrder.create(draftOrderPayload);
 
-    console.log('Created draft order:', draftOrder.id);
-    res.json({
-      order_id: draftOrder.id,
-      customer_id: customerResponse.id,
-    });
+    try {
+      const draftOrder = await shopify.draftOrder.create(draftOrderPayload);
+      console.log('Draft order created successfully:', draftOrder);
+
+      // Now update the draft order with additional details
+      const updatePayload = {
+        note_attributes: [
+          { name: 'wallet_address', value: customer.walletAddress },
+          { name: 'ada_amount', value: ada_amount.toString() },
+          { name: 'ada_price', value: ada_price.toString() },
+        ],
+        tags: ['ADA Payment'],
+      };
+
+      const updatedOrder = await shopify.draftOrder.update(
+        draftOrder.id,
+        updatePayload
+      );
+      console.log('Draft order updated successfully:', updatedOrder);
+
+      res.json({
+        order_id: draftOrder.id,
+        status: 'success',
+      });
+    } catch (shopifyError) {
+      console.error('Shopify API Error:', {
+        message: shopifyError.message,
+        response: shopifyError.response?.data,
+        status: shopifyError.response?.status,
+        statusText: shopifyError.response?.statusText,
+      });
+
+      throw shopifyError;
+    }
   } catch (error) {
     console.error('Error in create-draft-order:', error);
-    if (error.response?.data) {
-      console.error('API error details:', error.response.data);
-    }
     res.status(500).json({
       error: 'Failed to process order',
       details: error.message,
