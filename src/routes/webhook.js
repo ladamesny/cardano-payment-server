@@ -26,14 +26,22 @@ router.post('/create-draft-order', async (req, res) => {
     const draftOrderPayload = {
       draft_order: {
         line_items: cart.items.map((item) => ({
-          title: item.title || 'Product', // Add a fallback title
+          title: item.title || 'Product',
           variant_id: parseInt(item.variant_id),
           quantity: parseInt(item.quantity),
           requires_shipping: true,
+          price: item.price,
+          applied_discount: {
+            value_type: 'fixed_amount',
+            value: '0.00',
+            amount: '0.00',
+            title: 'No Discount',
+          },
         })),
-        customer: {
-          email: customer.email,
-        },
+        email: customer.email,
+        currency: 'USD',
+        taxes_included: false,
+        tax_exempt: false,
       },
     };
 
@@ -45,7 +53,7 @@ router.post('/create-draft-order', async (req, res) => {
     try {
       // First create the basic draft order
       const draftOrder = await shopify.draftOrder.create(draftOrderPayload);
-      console.log('Basic draft order created:', draftOrder.id);
+      console.log('Basic draft order created:', draftOrder);
 
       // Then update it with shipping address
       const updatePayload = {
@@ -71,18 +79,21 @@ router.post('/create-draft-order', async (req, res) => {
         draftOrder.id,
         updatePayload
       );
-      console.log('Draft order updated successfully:', updatedOrder.id);
+      console.log('Draft order updated successfully:', updatedOrder);
 
       res.json({
         order_id: updatedOrder.id,
         status: 'success',
       });
     } catch (shopifyError) {
+      // Enhanced error logging
       console.error('Shopify API Error Details:', {
         message: shopifyError.message,
-        response: shopifyError.response?.body, // Try to get the response body
+        response: shopifyError.response?.body,
+        data: shopifyError.response?.data,
         status: shopifyError.status,
         statusText: shopifyError.statusText,
+        headers: shopifyError.response?.headers,
         error: shopifyError.error,
       });
       throw shopifyError;
@@ -92,7 +103,7 @@ router.post('/create-draft-order', async (req, res) => {
     res.status(500).json({
       error: 'Failed to process order',
       details: error.message,
-      apiError: error.response?.body || error.response?.data,
+      apiError: error.response?.body || error.response?.data || error.response,
     });
   }
 });
