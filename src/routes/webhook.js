@@ -22,46 +22,86 @@ router.post('/create-draft-order', async (req, res) => {
   try {
     const { cart, total, ada_amount, ada_price, customer } = req.body;
 
-    console.log('Received create-draft-order request:', {
-      cartItems: cart.items,
-      total,
-      ada_amount,
-      ada_price,
-      customer,
-    });
-
-    // Format the shipping address
-    const shippingAddress = {
-      first_name: customer.firstName,
-      last_name: customer.lastName,
-      address1: customer.address1,
-      address2: customer.address2 || '',
-      city: customer.city,
-      province: customer.state,
-      zip: customer.zip,
-      country_code: 'US',
+    // First, create the customer
+    const customerInput = {
+      email: customer.email,
       phone: customer.phone,
+      firstName: customer.firstName,
+      lastName: customer.lastName,
+      addresses: [
+        {
+          address1: customer.address1,
+          address2: customer.address2 || '',
+          city: customer.city,
+          province: customer.state,
+          zip: customer.zip,
+          country: 'US',
+          phone: customer.phone,
+        },
+      ],
     };
 
-    // Create the draft order payload
+    console.log(
+      'Creating customer with payload:',
+      JSON.stringify(customerInput, null, 2)
+    );
+
+    // Create customer using GraphQL mutation
+    const customerMutation = `
+      mutation customerCreate($input: CustomerInput!) {
+        customerCreate(input: $input) {
+          userErrors {
+            field
+            message
+          }
+          customer {
+            id
+            email
+          }
+        }
+      }
+    `;
+
+    const customerResponse = await shopify.graphql({
+      query: customerMutation,
+      variables: {
+        input: customerInput,
+      },
+    });
+
+    console.log('Customer creation response:', customerResponse);
+
+    if (customerResponse.customerCreate.userErrors.length > 0) {
+      throw new Error(
+        `Failed to create customer: ${JSON.stringify(
+          customerResponse.customerCreate.userErrors
+        )}`
+      );
+    }
+
+    const customerId = customerResponse.customerCreate.customer.id;
+
+    // Now create the draft order with the customer ID
     const draftOrderPayload = {
       draft_order: {
         line_items: cart.items.map((item) => ({
           variant_id: parseInt(item.variant_id),
           quantity: parseInt(item.quantity),
-          applied_discount: {
-            value_type: 'fixed_amount',
-            value: '0.00',
-            amount: '0.00',
-          },
         })),
         customer: {
-          email: customer.email,
+          id: customerId,
+        },
+        shipping_address: {
           first_name: customer.firstName,
           last_name: customer.lastName,
+          address1: customer.address1,
+          address2: customer.address2 || '',
+          city: customer.city,
+          province: customer.state,
+          zip: customer.zip,
+          country_code: 'US',
+          phone: customer.phone,
         },
-        shipping_address: shippingAddress,
-        billing_address: shippingAddress,
         note_attributes: [
           {
             name: 'wallet_address',
@@ -77,8 +117,6 @@ router.post('/create-draft-order', async (req, res) => {
           },
         ],
         tags: ['ADA Payment'],
-        use_customer_default_address: false,
-        currency: 'USD',
       },
     };
 
@@ -90,17 +128,19 @@ router.post('/create-draft-order', async (req, res) => {
     const draftOrder = await shopify.draftOrder.create(draftOrderPayload);
 
     console.log('Created draft order:', draftOrder.id);
-    res.json({ order_id: draftOrder.id });
+    res.json({
+      order_id: draftOrder.id,
+      customer_id: customerId,
+    });
   } catch (error) {
-    console.error('Error creating draft order:', error);
-    // Log the full error response if available
+    console.error('Error in create-draft-order:', error);
     if (error.response?.data) {
-      console.error('Shopify error details:', error.response.data);
+      console.error('API error details:', error.response.data);
     }
     res.status(500).json({
-      error: 'Failed to create draft order',
+      error: 'Failed to process order',
       details: error.message,
-      shopifyError: error.response?.data,
+      apiError: error.response?.data,
     });
   }
 });
