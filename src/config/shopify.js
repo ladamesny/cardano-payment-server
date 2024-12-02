@@ -1,11 +1,11 @@
 const Shopify = require('shopify-api-node');
 
-if (!process.env.SHOP_NAME || !process.env.SHOPIFY_ACCESS_TOKEN) {
+if (!process.env.SHOPIFY_SHOP_NAME || !process.env.SHOPIFY_ACCESS_TOKEN) {
   throw new Error('Missing required Shopify environment variables');
 }
 
 const shopify = new Shopify({
-  shopName: process.env.SHOP_NAME,
+  shopName: process.env.SHOPIFY_SHOP_NAME,
   accessToken: process.env.SHOPIFY_ACCESS_TOKEN,
   apiVersion: '2024-01',
   autoLimit: true,
