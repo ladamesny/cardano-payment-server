@@ -52,15 +52,37 @@ async function verifyTransaction(txHash, expectedAmount) {
 
     // Get the transaction UTxOs
     const utxos = await blockfrost.txsUtxos(txHash);
-    console.log('Transaction UTXOs:', utxos);
+    console.log('Transaction UTXOs:', JSON.stringify(utxos, null, 2)); // Better logging
 
     // Verify the transaction outputs
-    const validPayment = utxos.outputs.some(
-      (output) =>
-        output.address === process.env.CARDANO_WALLET_ADDRESS &&
-        output.amount.find((amt) => amt.unit === 'lovelace')?.quantity >=
-          lovelaceAmount
-    );
+    const validPayment = utxos.outputs.some((output) => {
+      console.log('Checking output:', {
+        address: output.address,
+        expectedAddress: process.env.CARDANO_WALLET_ADDRESS,
+        amount: output.amount,
+      });
+
+      if (output.address === process.env.CARDANO_WALLET_ADDRESS) {
+        const lovelaceOutput = output.amount.find(
+          (amt) => amt.unit === 'lovelace'
+        );
+        console.log(
+          'Found matching address, lovelace amount:',
+          lovelaceOutput?.quantity
+        );
+        return (
+          lovelaceOutput &&
+          BigInt(lovelaceOutput.quantity) >= BigInt(lovelaceAmount)
+        );
+      }
+      return false;
+    });
+
+    console.log('Payment validation result:', {
+      valid: validPayment,
+      expectedAmount: lovelaceAmount,
+      expectedAddress: process.env.CARDANO_WALLET_ADDRESS,
+    });
 
     return {
       valid: validPayment,
