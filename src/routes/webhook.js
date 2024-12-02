@@ -22,64 +22,34 @@ router.post('/create-draft-order', async (req, res) => {
   try {
     const { cart, total, ada_amount, ada_price, customer } = req.body;
 
-    // First, create the customer
-    const customerInput = {
-      email: customer.email,
-      phone: customer.phone,
-      firstName: customer.firstName,
-      lastName: customer.lastName,
-      addresses: [
-        {
-          address1: customer.address1,
-          address2: customer.address2 || '',
-          city: customer.city,
-          province: customer.state,
-          zip: customer.zip,
-          country: 'US',
-          phone: customer.phone,
-        },
-      ],
+    // First, create the customer using REST API
+    const customerPayload = {
+      customer: {
+        email: customer.email,
+        phone: customer.phone,
+        first_name: customer.firstName,
+        last_name: customer.lastName,
+        addresses: [
+          {
+            address1: customer.address1,
+            address2: customer.address2 || '',
+            city: customer.city,
+            province: customer.state,
+            zip: customer.zip,
+            country: 'US',
+            phone: customer.phone,
+          },
+        ],
+      },
     };
 
     console.log(
       'Creating customer with payload:',
-      JSON.stringify(customerInput, null, 2)
+      JSON.stringify(customerPayload, null, 2)
     );
 
-    // Create customer using GraphQL mutation
-    const customerMutation = `
-      mutation customerCreate($input: CustomerInput!) {
-        customerCreate(input: $input) {
-          userErrors {
-            field
-            message
-          }
-          customer {
-            id
-            email
-          }
-        }
-      }
-    `;
-
-    const customerResponse = await shopify.graphql({
-      query: customerMutation,
-      variables: {
-        input: customerInput,
-      },
-    });
-
+    const customerResponse = await shopify.customer.create(customerPayload);
     console.log('Customer creation response:', customerResponse);
-
-    if (customerResponse.customerCreate.userErrors.length > 0) {
-      throw new Error(
-        `Failed to create customer: ${JSON.stringify(
-          customerResponse.customerCreate.userErrors
-        )}`
-      );
-    }
-
-    const customerId = customerResponse.customerCreate.customer.id;
 
     // Now create the draft order with the customer ID
     const draftOrderPayload = {
@@ -89,7 +59,7 @@ router.post('/create-draft-order', async (req, res) => {
           quantity: parseInt(item.quantity),
         })),
         customer: {
-          id: customerId,
+          id: customerResponse.id,
         },
         shipping_address: {
           first_name: customer.firstName,
@@ -130,7 +100,7 @@ router.post('/create-draft-order', async (req, res) => {
     console.log('Created draft order:', draftOrder.id);
     res.json({
       order_id: draftOrder.id,
-      customer_id: customerId,
+      customer_id: customerResponse.id,
     });
   } catch (error) {
     console.error('Error in create-draft-order:', error);
