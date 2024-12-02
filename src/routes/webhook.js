@@ -80,21 +80,26 @@ router.post('/payment', validatePaymentRequest, async (req, res) => {
         .json({ error: 'Invalid payment amount or address' });
     }
 
-    // First verify the order exists
+    // First verify the draft order exists
+    let draftOrder;
     try {
-      const order = await shopify.order.get(order_id);
-      console.log('Found Shopify order:', order.id);
+      draftOrder = await shopify.draftOrder.get(order_id);
+      console.log('Found Shopify draft order:', draftOrder.id);
     } catch (error) {
-      console.error('Error fetching Shopify order:', error);
+      console.error('Error fetching Shopify draft order:', error);
       return res.status(404).json({
-        error: 'Order not found',
-        details: `Unable to find order ${order_id}`,
+        error: 'Draft order not found',
+        details: `Unable to find draft order ${order_id}`,
       });
     }
 
-    // Update Shopify order
+    // Complete the draft order
     try {
-      await shopify.order.update(order_id, {
+      const completedOrder = await shopify.draftOrder.complete(order_id);
+      console.log('Completed draft order:', completedOrder.id);
+
+      // Update the completed order with payment details
+      await shopify.order.update(completedOrder.order_id, {
         financial_status: 'paid',
         note: `Paid with ADA. Transaction: ${transaction_hash}`,
         note_attributes: [
@@ -117,16 +122,19 @@ router.post('/payment', validatePaymentRequest, async (req, res) => {
         ],
       });
 
-      console.log(`Successfully processed payment for order ${order_id}`);
+      console.log(
+        `Successfully processed payment for order ${completedOrder.order_id}`
+      );
       return res.json({
         success: true,
-        message: 'Payment verified and order updated',
+        message: 'Payment verified and order completed',
+        order_id: completedOrder.order_id,
         transaction_hash,
       });
     } catch (error) {
-      console.error('Error updating Shopify order:', error);
+      console.error('Error completing draft order:', error);
       return res.status(500).json({
-        error: 'Failed to update order',
+        error: 'Failed to complete draft order',
         details: error.message,
       });
     }
