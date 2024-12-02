@@ -22,6 +22,11 @@ router.post('/create-draft-order', async (req, res) => {
   try {
     const { cart, customer } = req.body;
 
+    // Format price as string with 2 decimal places
+    const formatPrice = (price) => {
+      return (price / 100).toFixed(2);
+    };
+
     // Start with minimal draft order
     const draftOrderPayload = {
       draft_order: {
@@ -30,7 +35,7 @@ router.post('/create-draft-order', async (req, res) => {
           variant_id: parseInt(item.variant_id),
           quantity: parseInt(item.quantity),
           requires_shipping: true,
-          price: item.price,
+          price: formatPrice(item.price), // Convert cents to dollars
           applied_discount: {
             value_type: 'fixed_amount',
             value: '0.00',
@@ -38,63 +43,49 @@ router.post('/create-draft-order', async (req, res) => {
             title: 'No Discount',
           },
         })),
-        email: customer.email,
+        customer: {
+          email: customer.email,
+          accepts_marketing: false,
+        },
+        use_customer_default_address: false,
         currency: 'USD',
         taxes_included: false,
         tax_exempt: false,
+        presentment_currency: 'USD',
+        note_attributes: [
+          {
+            name: 'source',
+            value: 'ada_payment',
+          },
+        ],
+        shipping_line: {
+          custom: true,
+          title: 'Standard Shipping',
+          price: '0.00',
+        },
       },
     };
 
     console.log(
-      'Creating minimal draft order with payload:',
+      'Creating draft order with payload:',
       JSON.stringify(draftOrderPayload, null, 2)
     );
 
     try {
-      // First create the basic draft order
       const draftOrder = await shopify.draftOrder.create(draftOrderPayload);
-      console.log('Basic draft order created:', draftOrder);
-
-      // Then update it with shipping address
-      const updatePayload = {
-        shipping_address: {
-          first_name: customer.firstName,
-          last_name: customer.lastName,
-          address1: customer.address1,
-          address2: customer.address2 || '',
-          city: customer.city,
-          province: customer.state,
-          zip: customer.zip,
-          country_code: 'US',
-          phone: customer.phone,
-        },
-      };
-
-      console.log(
-        'Updating draft order with address:',
-        JSON.stringify(updatePayload, null, 2)
-      );
-
-      const updatedOrder = await shopify.draftOrder.update(
-        draftOrder.id,
-        updatePayload
-      );
-      console.log('Draft order updated successfully:', updatedOrder);
+      console.log('Draft order response:', JSON.stringify(draftOrder, null, 2));
 
       res.json({
-        order_id: updatedOrder.id,
+        order_id: draftOrder.id,
         status: 'success',
       });
     } catch (shopifyError) {
-      // Enhanced error logging
+      // Try to get the actual error message
+      const errorBody = shopifyError.response?.body;
       console.error('Shopify API Error Details:', {
         message: shopifyError.message,
-        response: shopifyError.response?.body,
-        data: shopifyError.response?.data,
+        body: typeof errorBody === 'string' ? JSON.parse(errorBody) : errorBody,
         status: shopifyError.status,
-        statusText: shopifyError.statusText,
-        headers: shopifyError.response?.headers,
-        error: shopifyError.error,
       });
       throw shopifyError;
     }
@@ -103,7 +94,7 @@ router.post('/create-draft-order', async (req, res) => {
     res.status(500).json({
       error: 'Failed to process order',
       details: error.message,
-      apiError: error.response?.body || error.response?.data || error.response,
+      apiError: error.response?.body,
     });
   }
 });
