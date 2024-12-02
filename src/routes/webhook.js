@@ -20,38 +20,53 @@ const validatePaymentRequest = (req, res, next) => {
 // Add new draft order endpoint
 router.post('/create-draft-order', async (req, res) => {
   try {
-    const { cart, total, ada_amount, ada_price } = req.body;
+    const { cart, total, ada_amount, ada_price, customer } = req.body;
 
-    if (!cart || !total || !ada_amount || !ada_price) {
-      return res.status(400).json({
-        error:
-          'Missing required fields: cart, total, ada_amount, and ada_price are required',
-      });
-    }
+    // Format the shipping address
+    const shippingAddress = {
+      first_name: customer.firstName,
+      last_name: customer.lastName,
+      address1: customer.address1,
+      address2: customer.address2 || '',
+      city: customer.city,
+      province: customer.state,
+      zip: customer.zip,
+      country: customer.country,
+      phone: customer.phone,
+    };
 
-    // Create draft order
+    // Create a draft order with customer information
     const draftOrder = await shopify.draftOrder.create({
       line_items: cart.items.map((item) => ({
         variant_id: item.variant_id,
         quantity: item.quantity,
       })),
-      note: `Payment pending - ADA Amount: ${ada_amount} (@ $${ada_price} per ADA)`,
-      financial_status: 'pending',
+      email: customer.email,
+      shipping_address: shippingAddress,
+      billing_address: shippingAddress,
+      note_attributes: [
+        {
+          name: 'wallet_address',
+          value: customer.walletAddress,
+        },
+        {
+          name: 'ada_amount',
+          value: ada_amount.toString(),
+        },
+        {
+          name: 'ada_price',
+          value: ada_price.toString(),
+        },
+      ],
+      tags: ['ADA Payment'],
+      use_customer_default_address: false,
     });
 
-    console.log('Draft order:', JSON.stringify(draftOrder, null, 2));
-    console.log(`Created draft order: ${draftOrder.id}`);
-
-    res.json({
-      success: true,
-      order_id: draftOrder.id,
-    });
+    console.log('Created draft order:', draftOrder.id);
+    res.json({ order_id: draftOrder.id });
   } catch (error) {
     console.error('Error creating draft order:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-    });
+    res.status(500).json({ error: 'Failed to create draft order' });
   }
 });
 
@@ -80,64 +95,43 @@ router.post('/payment', validatePaymentRequest, async (req, res) => {
         .json({ error: 'Invalid payment amount or address' });
     }
 
-    // First verify the draft order exists
-    let draftOrder;
-    try {
-      draftOrder = await shopify.draftOrder.get(order_id);
-      console.log('Found Shopify draft order:', draftOrder.id);
-    } catch (error) {
-      console.error('Error fetching Shopify draft order:', error);
-      return res.status(404).json({
-        error: 'Draft order not found',
-        details: `Unable to find draft order ${order_id}`,
-      });
-    }
-
     // Complete the draft order
-    try {
-      const completedOrder = await shopify.draftOrder.complete(order_id);
-      console.log('Completed draft order:', completedOrder.id);
+    const completedOrder = await shopify.draftOrder.complete(order_id);
+    console.log('Completed draft order:', completedOrder.id);
 
-      // Update the completed order with payment details
-      await shopify.order.update(completedOrder.order_id, {
-        financial_status: 'paid',
-        note: `Paid with ADA. Transaction: ${transaction_hash}`,
-        note_attributes: [
-          {
-            name: 'cardano_transaction',
-            value: transaction_hash,
-          },
-          {
-            name: 'ada_amount',
-            value: ada_amount.toString(),
-          },
-          {
-            name: 'ada_price',
-            value: ada_price.toString(),
-          },
-          {
-            name: 'usd_amount',
-            value: usd_amount.toString(),
-          },
-        ],
-      });
+    // Update the order with payment details
+    const updatedOrder = await shopify.order.update(completedOrder.order_id, {
+      financial_status: 'paid',
+      note_attributes: [
+        {
+          name: 'cardano_transaction',
+          value: transaction_hash,
+        },
+        {
+          name: 'ada_amount',
+          value: ada_amount.toString(),
+        },
+        {
+          name: 'ada_price',
+          value: ada_price.toString(),
+        },
+        {
+          name: 'usd_amount',
+          value: usd_amount.toString(),
+        },
+      ],
+      tags: ['ADA Payment', 'Cardano'],
+    });
 
-      console.log(
-        `Successfully processed payment for order ${completedOrder.order_id}`
-      );
-      return res.json({
-        success: true,
-        message: 'Payment verified and order completed',
-        order_id: completedOrder.order_id,
-        transaction_hash,
-      });
-    } catch (error) {
-      console.error('Error completing draft order:', error);
-      return res.status(500).json({
-        error: 'Failed to complete draft order',
-        details: error.message,
-      });
-    }
+    console.log(
+      `Successfully processed payment for order ${completedOrder.order_id}`
+    );
+    return res.json({
+      success: true,
+      message: 'Payment verified and order completed',
+      order_id: completedOrder.order_id,
+      transaction_hash,
+    });
   } catch (error) {
     console.error('Payment processing failed:', error);
     res.status(500).json({
