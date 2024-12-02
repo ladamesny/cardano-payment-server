@@ -45,29 +45,31 @@ router.post('/create-draft-order', async (req, res) => {
 
     // Create the draft order payload
     const draftOrderPayload = {
-      line_items: cart.items.map((item) => ({
-        variant_id: item.variant_id,
-        quantity: item.quantity,
-      })),
-      email: customer.email,
-      shipping_address: shippingAddress,
-      billing_address: shippingAddress,
-      note_attributes: [
-        {
-          name: 'wallet_address',
-          value: customer.walletAddress,
-        },
-        {
-          name: 'ada_amount',
-          value: ada_amount.toString(),
-        },
-        {
-          name: 'ada_price',
-          value: ada_price.toString(),
-        },
-      ],
-      tags: ['ADA Payment'],
-      use_customer_default_address: false,
+      draft_order: {
+        line_items: cart.items.map((item) => ({
+          variant_id: item.variant_id,
+          quantity: item.quantity,
+        })),
+        email: customer.email,
+        shipping_address: shippingAddress,
+        billing_address: shippingAddress,
+        note_attributes: [
+          {
+            name: 'wallet_address',
+            value: customer.walletAddress,
+          },
+          {
+            name: 'ada_amount',
+            value: ada_amount.toString(),
+          },
+          {
+            name: 'ada_price',
+            value: ada_price.toString(),
+          },
+        ],
+        tags: ['ADA Payment'],
+        use_customer_default_address: false,
+      },
     };
 
     console.log(
