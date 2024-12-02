@@ -80,36 +80,56 @@ router.post('/payment', validatePaymentRequest, async (req, res) => {
         .json({ error: 'Invalid payment amount or address' });
     }
 
-    // Update Shopify order
-    await shopify.order.update(order_id, {
-      financial_status: 'paid',
-      note: `Paid with ADA. Transaction: ${transaction_hash}`,
-      note_attributes: [
-        {
-          name: 'cardano_transaction',
-          value: transaction_hash,
-        },
-        {
-          name: 'ada_amount',
-          value: ada_amount.toString(),
-        },
-        {
-          name: 'ada_price',
-          value: ada_price.toString(),
-        },
-        {
-          name: 'usd_amount',
-          value: usd_amount.toString(),
-        },
-      ],
-    });
+    // First verify the order exists
+    try {
+      const order = await shopify.order.get(order_id);
+      console.log('Found Shopify order:', order.id);
+    } catch (error) {
+      console.error('Error fetching Shopify order:', error);
+      return res.status(404).json({
+        error: 'Order not found',
+        details: `Unable to find order ${order_id}`,
+      });
+    }
 
-    console.log(`Successfully processed payment for order ${order_id}`);
-    res.json({
-      success: true,
-      message: 'Payment verified and order updated',
-      transaction_hash,
-    });
+    // Update Shopify order
+    try {
+      await shopify.order.update(order_id, {
+        financial_status: 'paid',
+        note: `Paid with ADA. Transaction: ${transaction_hash}`,
+        note_attributes: [
+          {
+            name: 'cardano_transaction',
+            value: transaction_hash,
+          },
+          {
+            name: 'ada_amount',
+            value: ada_amount.toString(),
+          },
+          {
+            name: 'ada_price',
+            value: ada_price.toString(),
+          },
+          {
+            name: 'usd_amount',
+            value: usd_amount.toString(),
+          },
+        ],
+      });
+
+      console.log(`Successfully processed payment for order ${order_id}`);
+      return res.json({
+        success: true,
+        message: 'Payment verified and order updated',
+        transaction_hash,
+      });
+    } catch (error) {
+      console.error('Error updating Shopify order:', error);
+      return res.status(500).json({
+        error: 'Failed to update order',
+        details: error.message,
+      });
+    }
   } catch (error) {
     console.error('Payment processing failed:', error);
     res.status(500).json({
