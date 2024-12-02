@@ -20,12 +20,12 @@ const validatePaymentRequest = (req, res, next) => {
 // Add new draft order endpoint
 router.post('/create-draft-order', async (req, res) => {
   try {
-    const { cart, total, ada_amount } = req.body;
+    const { cart, total, ada_amount, ada_price } = req.body;
 
-    if (!cart || !total || !ada_amount) {
+    if (!cart || !total || !ada_amount || !ada_price) {
       return res.status(400).json({
         error:
-          'Missing required fields: cart, total, and ada_amount are required',
+          'Missing required fields: cart, total, ada_amount, and ada_price are required',
       });
     }
 
@@ -35,16 +35,16 @@ router.post('/create-draft-order', async (req, res) => {
         variant_id: item.variant_id,
         quantity: item.quantity,
       })),
-      note: `Payment pending - ADA Amount: ${ada_amount}`,
+      note: `Payment pending - ADA Amount: ${ada_amount} (@ $${ada_price} per ADA)`,
       financial_status: 'pending',
     });
 
     console.log('Draft order:', JSON.stringify(draftOrder, null, 2));
-    console.log(`Created draft order: ${draftOrder.order_number}`);
+    console.log(`Created draft order: ${draftOrder.id}`);
 
     res.json({
       success: true,
-      order_number: draftOrder.order_number,
+      order_id: draftOrder.id,
     });
   } catch (error) {
     console.error('Error creating draft order:', error);
@@ -57,12 +57,15 @@ router.post('/create-draft-order', async (req, res) => {
 
 // Payment webhook endpoint
 router.post('/payment', validatePaymentRequest, async (req, res) => {
-  const { order_id, transaction_hash, ada_amount, usd_amount } = req.body;
+  const { order_id, transaction_hash, ada_amount, usd_amount, ada_price } =
+    req.body;
 
   try {
     console.log(`Processing payment for order ${order_id}`);
     console.log(`Transaction hash: ${transaction_hash}`);
-    console.log(`Amount: ${ada_amount} ADA (${usd_amount} USD)`);
+    console.log(
+      `Amount: ${ada_amount} ADA (@ $${ada_price} per ADA) (${usd_amount} USD)`
+    );
 
     // Verify the transaction on blockchain
     const { valid, transaction } = await verifyTransaction(
@@ -89,6 +92,10 @@ router.post('/payment', validatePaymentRequest, async (req, res) => {
         {
           name: 'ada_amount',
           value: ada_amount.toString(),
+        },
+        {
+          name: 'ada_price',
+          value: ada_price.toString(),
         },
         {
           name: 'usd_amount',
