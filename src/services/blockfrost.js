@@ -1,8 +1,14 @@
+require('dotenv').config();
 const { BlockFrostAPI } = require('@blockfrost/blockfrost-js');
+
+// Add validation for required environment variables
+if (!process.env.BLOCKFROST_PROJECT_ID) {
+  throw new Error('BLOCKFROST_PROJECT_ID environment variable is not set');
+}
 
 const blockfrost = new BlockFrostAPI({
   projectId: process.env.BLOCKFROST_PROJECT_ID,
-  network: process.env.CARDANO_NETWORK, // or 'preprod' for testnet
+  network: process.env.CARDANO_NETWORK || 'mainnet', // Add default fallback
 });
 
 // Helper function to verify transaction
