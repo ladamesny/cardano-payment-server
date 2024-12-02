@@ -2,7 +2,7 @@ const { BlockFrostAPI } = require('@blockfrost/blockfrost-js');
 
 const blockfrost = new BlockFrostAPI({
   projectId: process.env.BLOCKFROST_PROJECT_ID,
-  network: 'mainnet', // or 'preprod' for testnet
+  network: process.env.CARDANO_NETWORK, // or 'preprod' for testnet
 });
 
 // Helper function to verify transaction
