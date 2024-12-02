@@ -86,6 +86,8 @@ router.post('/create-draft-order', async (req, res) => {
     // Log the full error response if available
     if (error.response) {
       console.error('Shopify error response:', {
+        message: error.message,
+        response: error.response,
         status: error.response.status,
         data: error.response.data,
       });
