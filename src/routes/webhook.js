@@ -103,8 +103,14 @@ router.post('/create-draft-order', async (req, res) => {
 
 // Payment webhook endpoint
 router.post('/payment', validatePaymentRequest, async (req, res) => {
-  const { order_id, transaction_hash, ada_amount, usd_amount, ada_price } =
-    req.body;
+  const {
+    order_id,
+    transaction_hash,
+    ada_amount,
+    usd_amount,
+    ada_price,
+    shipping_cost,
+  } = req.body;
 
   try {
     console.log(`Processing payment for order ${order_id}`);
@@ -130,7 +136,7 @@ router.post('/payment', validatePaymentRequest, async (req, res) => {
     const completedOrder = await shopify.draftOrder.complete(order_id);
     console.log('Completed draft order:', completedOrder.id);
 
-    // Update the order with payment details
+    // Update the order with payment details including shipping
     const updatedOrder = await shopify.order.update(completedOrder.order_id, {
       financial_status: 'paid',
       note_attributes: [
@@ -149,6 +155,10 @@ router.post('/payment', validatePaymentRequest, async (req, res) => {
         {
           name: 'usd_amount',
           value: usd_amount.toString(),
+        },
+        {
+          name: 'shipping_cost',
+          value: shipping_cost.toString(),
         },
       ],
       tags: ['ADA Payment', 'Cardano'],

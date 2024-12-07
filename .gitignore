@@ -1,3 +1,4 @@
 .env
 node_modules
 src/cardano-wallet.js
+src/page.cardano-checkout.liquid
