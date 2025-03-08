@@ -101,6 +101,12 @@ router.post('/create-draft-order', async (req, res) => {
   }
 });
 
+router.get('/callback', async (req, res) => {
+  const cod4e = req.query.code;
+  console.log('Code: ', code);
+  res.send('authorization complete!');
+});
+
 // Payment webhook endpoint
 router.post('/payment', validatePaymentRequest, async (req, res) => {
   const {
