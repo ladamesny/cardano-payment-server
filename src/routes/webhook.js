@@ -2,6 +2,21 @@ const express = require('express');
 const router = express.Router();
 const shopify = require('../config/shopify');
 const { verifyTransaction } = require('../services/blockfrost');
+const cors = require('cors');
+
+// Configure CORS
+const corsOptions = {
+  origin: [
+    'https://rq-backend-1a4371619f22.herokuapp.com',
+    'http://localhost:3000',
+  ],
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Accept', 'Authorization'],
+  credentials: true,
+};
+
+// Apply CORS middleware to all routes in this router
+router.use(cors(corsOptions));
 
 const validatePaymentRequest = (req, res, next) => {
   // Middleware to validate request body
@@ -17,8 +32,11 @@ const validatePaymentRequest = (req, res, next) => {
   next();
 };
 
+// Handle preflight requests for create-draft-order
+router.options('/create-draft-order', cors(corsOptions));
+
 // Add new draft order endpoint
-router.post('/create-draft-order', async (req, res) => {
+router.post('/create-draft-order', cors(corsOptions), async (req, res) => {
   try {
     const { cart, customer } = req.body;
 
