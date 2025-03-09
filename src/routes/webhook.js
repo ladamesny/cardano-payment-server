@@ -6,7 +6,7 @@ const { verifyTransaction } = require('../services/blockfrost');
 // Backend URL constant
 const BACKEND_URL = 'https://rq-staging-29d53091b9bf.herokuapp.com';
 
-// Remove all CORS-related code from the router level
+// Parse JSON bodies
 router.use(express.json());
 
 const validatePaymentRequest = (req, res, next) => {
@@ -19,7 +19,6 @@ const validatePaymentRequest = (req, res, next) => {
         'Missing required fields: order_id, transaction_hash, and ada_amount are required',
     });
   }
-
   next();
 };
 

@@ -5,21 +5,30 @@ const webhookRoutes = require('./src/routes/webhook');
 
 const app = express();
 
-// Middleware
-app.use(express.json());
+// Debug middleware to log all requests
+app.use((req, res, next) => {
+  console.log('Incoming request:', {
+    method: req.method,
+    path: req.path,
+    origin: req.headers.origin,
+    headers: req.headers,
+  });
+  next();
+});
 
+// CORS configuration
 app.use(
   cors({
-    origin: [
-      'https://refinedqualities.com',
-      'https://d00537-2.myshopify.com',
-      'http://localhost:3000',
-    ],
-    methods: ['GET', 'POST'],
-    credentials: false, // Change this to false
-    allowedHeaders: ['Content-Type'],
+    origin: ['https://staging-rq.myshopify.com', 'http://localhost:3000'],
+    methods: ['GET', 'POST', 'OPTIONS'],
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Accept', 'Origin'],
+    optionsSuccessStatus: 200,
   })
 );
+
+// Body parsing middleware
+app.use(express.json());
 
 // Routes
 app.use('/webhook', webhookRoutes);
