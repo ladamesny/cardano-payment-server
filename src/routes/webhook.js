@@ -8,13 +8,26 @@ const cors = require('cors');
 // const BACKEND_URL = 'https://rq-backend-1a4371619f22.herokuapp.com';
 const BACKEND_URL = 'https://rq-staging-29d53091b9bf.herokuapp.com';
 
-// Configure CORS
+// Configure CORS with more specific options
 const corsOptions = {
-  origin: [
-    'https://staging-rq.myshopify.com',
-    'http://localhost:3000',
-    'https://rq-store.myshopify.com',
-  ],
+  origin: function (origin, callback) {
+    const allowedOrigins = [
+      'https://staging-rq.myshopify.com',
+      'https://checkout.shopify.com',
+      'https://rq-store.myshopify.com',
+      'http://localhost:3000',
+    ];
+
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log('Origin not allowed by CORS:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
     'Content-Type',
@@ -23,18 +36,21 @@ const corsOptions = {
     'Origin',
     'X-Requested-With',
     'X-Shopify-Access-Token',
+    'shopify-access-token',
+    'x-shopify-shop-domain',
   ],
   exposedHeaders: ['Content-Range', 'X-Content-Range'],
   credentials: true,
-  maxAge: 86400, // 24 hours in seconds
-  preflightContinue: true,
+  maxAge: 86400,
+  preflightContinue: false,
+  optionsSuccessStatus: 204,
 };
 
-// Enable pre-flight requests for all routes
-router.options('*', cors(corsOptions));
-
-// Apply CORS middleware to all routes in this router
+// Apply CORS middleware to all routes
 router.use(cors(corsOptions));
+
+// Specific handling for OPTIONS requests
+router.options('*', cors(corsOptions));
 
 const validatePaymentRequest = (req, res, next) => {
   // Middleware to validate request body
