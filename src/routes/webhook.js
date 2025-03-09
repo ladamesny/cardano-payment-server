@@ -2,36 +2,11 @@ const express = require('express');
 const router = express.Router();
 const shopify = require('../config/shopify');
 const { verifyTransaction } = require('../services/blockfrost');
-const cors = require('cors');
 
 // Backend URL constant
-// const BACKEND_URL = 'https://rq-backend-1a4371619f22.herokuapp.com';
 const BACKEND_URL = 'https://rq-staging-29d53091b9bf.herokuapp.com';
 
-// CORS configuration
-const corsOptions = {
-  origin: 'https://staging-rq.myshopify.com',
-  credentials: true,
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Accept'],
-  optionsSuccessStatus: 200,
-};
-
-// Add CORS handling for all routes
-router.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', 'https://staging-rq.myshopify.com');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Accept');
-
-  // Handle preflight
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-  next();
-});
-
-// Parse JSON bodies
+// Remove all CORS-related code from the router level
 router.use(express.json());
 
 const validatePaymentRequest = (req, res, next) => {
