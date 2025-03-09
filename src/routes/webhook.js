@@ -10,11 +10,28 @@ const BACKEND_URL = 'https://rq-staging-29d53091b9bf.herokuapp.com';
 
 // Configure CORS
 const corsOptions = {
-  origin: [BACKEND_URL, 'http://localhost:3000'],
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Accept', 'Authorization'],
+  origin: [
+    'https://staging-rq.myshopify.com',
+    'http://localhost:3000',
+    'https://rq-store.myshopify.com',
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type',
+    'Accept',
+    'Authorization',
+    'Origin',
+    'X-Requested-With',
+    'X-Shopify-Access-Token',
+  ],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
   credentials: true,
+  maxAge: 86400, // 24 hours in seconds
+  preflightContinue: true,
 };
+
+// Enable pre-flight requests for all routes
+router.options('*', cors(corsOptions));
 
 // Apply CORS middleware to all routes in this router
 router.use(cors(corsOptions));
@@ -32,9 +49,6 @@ const validatePaymentRequest = (req, res, next) => {
 
   next();
 };
-
-// Handle preflight requests for create-draft-order
-router.options('/create-draft-order', cors(corsOptions));
 
 // Add new draft order endpoint
 router.post('/create-draft-order', cors(corsOptions), async (req, res) => {
