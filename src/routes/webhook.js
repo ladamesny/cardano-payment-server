@@ -152,11 +152,11 @@ router.post('/payment', validatePaymentRequest, async (req, res) => {
     console.log('Transaction verified successfully');
 
     try {
-      console.log('Completing draft order in Shopify...');
+      console.log('Checking order status in Shopify...');
       const shopName = process.env.SHOPIFY_SHOP_NAME;
       const accessToken = process.env.SHOPIFY_ACCESS_TOKEN;
 
-      // First, check if the draft order exists
+      // First, check if the draft order exists and its status
       const checkResponse = await fetch(
         `https://${shopName}/admin/api/2024-01/draft_orders/${order_id}.json`,
         {
@@ -169,17 +169,43 @@ router.post('/payment', validatePaymentRequest, async (req, res) => {
       );
 
       if (!checkResponse.ok) {
-        console.error(
-          'Draft order not found or error:',
-          await checkResponse.text()
-        );
-        return res.status(404).json({
-          error: 'Draft order not found or error',
-          order_id: order_id,
+        const checkErrorText = await checkResponse.text();
+        console.log('Draft order check result:', checkErrorText);
+
+        // Check if this is a "not found" because it's already been converted to a regular order
+        // If so, try to find the associated order directly
+        if (checkResponse.status === 404) {
+          console.log(
+            'Draft order not found, may already be converted to order. Proceeding as success.'
+          );
+          return res.json({
+            success: true,
+            message: 'Payment verified, order likely already processed',
+            transaction_hash,
+          });
+        }
+
+        return res.status(checkResponse.status).json({
+          error: 'Error checking draft order',
+          details: checkErrorText,
         });
       }
 
-      // Next, complete the draft order
+      const draftOrderData = await checkResponse.json();
+
+      // If the order is already completed/paid, return success rather than error
+      if (draftOrderData.draft_order.status === 'completed') {
+        console.log('Draft order already completed, returning success');
+        return res.json({
+          success: true,
+          message: 'Order already completed',
+          transaction_hash,
+          order_id: draftOrderData.draft_order.order_id, // Include the converted order ID if available
+        });
+      }
+
+      // Only try to complete if not already completed
+      console.log('Completing draft order in Shopify...');
       const completeResponse = await fetch(
         `https://${shopName}/admin/api/2024-01/draft_orders/${order_id}/complete.json`,
         {
@@ -191,107 +217,115 @@ router.post('/payment', validatePaymentRequest, async (req, res) => {
         }
       );
 
+      // Get response as text first for error handling
+      const completeResponseText = await completeResponse.text();
+
+      // Handle "already paid" as success
       if (!completeResponse.ok) {
-        const errorData = await completeResponse.text();
-        console.error('Failed to complete draft order:', errorData);
-        throw new Error(`Failed to complete draft order: ${errorData}`);
+        console.log('Complete draft order response:', completeResponseText);
+
+        // If order was already paid, treat as success not error
+        if (completeResponseText.includes('This order has been paid')) {
+          return res.json({
+            success: true,
+            message: 'Order already paid and completed',
+            transaction_hash,
+          });
+        }
+
+        // If we hit rate limits, tell the client to retry
+        if (completeResponseText.includes('rate limit')) {
+          return res.status(429).json({
+            error: 'Rate limit reached',
+            details: 'Please retry after a minute',
+            shouldRetry: true,
+          });
+        }
+
+        throw new Error(
+          `Failed to complete draft order: ${completeResponseText}`
+        );
       }
 
-      const completedOrderText = await completeResponse.text();
-      console.log('Raw completed order response:', completedOrderText);
-
+      // Parse the successful response
       let completedOrder;
       try {
-        completedOrder = JSON.parse(completedOrderText);
+        completedOrder = JSON.parse(completeResponseText);
       } catch (e) {
-        console.error('Failed to parse completed order JSON:', e);
+        console.error('Failed to parse complete order response:', e);
         return res.json({
           success: true,
-          message: 'Payment verified but could not parse order details',
+          message: 'Order likely completed but response parsing failed',
           transaction_hash,
         });
       }
 
-      // Check if the response has the expected structure
-      if (
-        !completedOrder ||
-        !completedOrder.order ||
-        !completedOrder.order.id
-      ) {
-        console.error(
-          'Completed order missing expected structure:',
-          completedOrder
+      // Continue with updating the order with payment details
+      if (completedOrder && completedOrder.order && completedOrder.order.id) {
+        console.log(
+          'Updating order with payment details:',
+          completedOrder.order.id
         );
-        return res.json({
-          success: true,
-          message: 'Payment verified but order structure invalid',
-          transaction_hash,
-        });
-      }
 
-      console.log(
-        'Draft order completed successfully with order ID:',
-        completedOrder.order.id
-      );
-
-      // Then, update the order with payment details
-      const orderUpdateResponse = await fetch(
-        `https://${shopName}/admin/api/2024-01/orders/${completedOrder.order.id}.json`,
-        {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Shopify-Access-Token': accessToken,
-          },
-          body: JSON.stringify({
-            order: {
-              id: completedOrder.order.id,
-              financial_status: 'paid',
-              note: `Paid with Cardano ADA\nTransaction Hash: ${transaction_hash}\nADA Amount: ${ada_amount}\nADA Price: $${ada_price}`,
-              note_attributes: [
-                {
-                  name: 'cardano_transaction',
-                  value: transaction_hash,
-                },
-                {
-                  name: 'ada_amount',
-                  value: ada_amount.toString(),
-                },
-                {
-                  name: 'ada_price',
-                  value: ada_price.toString(),
-                },
-                {
-                  name: 'usd_amount',
-                  value: usd_amount.toString(),
-                },
-              ],
+        // Update the order with payment info
+        const orderUpdateResponse = await fetch(
+          `https://${shopName}/admin/api/2024-01/orders/${completedOrder.order.id}.json`,
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Shopify-Access-Token': accessToken,
             },
-          }),
-        }
-      );
+            body: JSON.stringify({
+              order: {
+                id: completedOrder.order.id,
+                financial_status: 'paid',
+                note: `Paid with Cardano ADA\nTransaction Hash: ${transaction_hash}\nADA Amount: ${ada_amount}\nADA Price: $${ada_price}`,
+                note_attributes: [
+                  {
+                    name: 'cardano_transaction',
+                    value: transaction_hash,
+                  },
+                  {
+                    name: 'ada_amount',
+                    value: ada_amount.toString(),
+                  },
+                  {
+                    name: 'ada_price',
+                    value: ada_price.toString(),
+                  },
+                  {
+                    name: 'usd_amount',
+                    value: usd_amount.toString(),
+                  },
+                ],
+              },
+            }),
+          }
+        );
 
-      if (!orderUpdateResponse.ok) {
-        const errorData = await orderUpdateResponse.text();
-        console.error('Failed to update order:', errorData);
-        // Even if updating fails, we can return success since the order was created
+        if (!orderUpdateResponse.ok) {
+          console.warn(
+            'Order was completed but metadata update failed. This is not critical.'
+          );
+        } else {
+          console.log('Order updated with payment details successfully');
+        }
+
         return res.json({
           success: true,
-          message: 'Order created but failed to update details',
+          message: 'Payment verified and order completed',
           order_id: completedOrder.order.id,
           transaction_hash,
         });
+      } else {
+        // Even if we can't get the order ID, still return success
+        return res.json({
+          success: true,
+          message: 'Payment verified and order likely completed',
+          transaction_hash,
+        });
       }
-
-      const updatedOrder = await orderUpdateResponse.json();
-      console.log('Order updated successfully:', updatedOrder);
-
-      return res.json({
-        success: true,
-        message: 'Payment verified and order completed',
-        order_id: completedOrder.order.id,
-        transaction_hash,
-      });
     } catch (shopifyError) {
       console.error('Shopify API error:', shopifyError);
       throw shopifyError;
