@@ -8,62 +8,31 @@ const cors = require('cors');
 // const BACKEND_URL = 'https://rq-backend-1a4371619f22.herokuapp.com';
 const BACKEND_URL = 'https://rq-staging-29d53091b9bf.herokuapp.com';
 
-// Debug middleware to log all requests
-router.use((req, res, next) => {
-  console.log('Incoming request:', {
-    method: req.method,
-    path: req.path,
-    origin: req.headers.origin,
-    headers: req.headers,
-  });
-  next();
-});
-
 // CORS configuration
 const corsOptions = {
-  origin: function (origin, callback) {
-    console.log('Request origin:', origin);
-
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) {
-      console.log('No origin provided');
-      return callback(null, true);
-    }
-
-    const allowedOrigins = [
-      'https://staging-rq.myshopify.com',
-      'https://checkout.shopify.com',
-      'https://staging-rq.myshopify.com/pages/cardano-checkout',
-    ];
-
-    if (allowedOrigins.includes(origin) || origin.endsWith('.myshopify.com')) {
-      console.log('Origin allowed:', origin);
-      callback(null, true);
-    } else {
-      console.log('Origin not allowed:', origin);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+  origin: 'https://staging-rq.myshopify.com',
   credentials: true,
   methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Accept', 'Origin', 'X-Requested-With'],
-  exposedHeaders: ['Access-Control-Allow-Origin'],
-  maxAge: 86400,
+  allowedHeaders: ['Content-Type', 'Accept'],
   optionsSuccessStatus: 200,
 };
 
-// Apply CORS middleware first
-router.use(cors(corsOptions));
-
-// Parse JSON bodies after CORS
-router.use(express.json());
-
-// Add response headers middleware
+// Add CORS handling for all routes
 router.use((req, res, next) => {
-  // Ensure CORS headers are present on all responses
+  res.header('Access-Control-Allow-Origin', 'https://staging-rq.myshopify.com');
   res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Accept');
+
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
   next();
 });
+
+// Parse JSON bodies
+router.use(express.json());
 
 const validatePaymentRequest = (req, res, next) => {
   // Middleware to validate request body
@@ -83,6 +52,12 @@ const validatePaymentRequest = (req, res, next) => {
 router.post('/create-draft-order', async (req, res) => {
   try {
     const { cart, customer } = req.body;
+
+    // Log the request for debugging
+    console.log('Processing draft order request:', {
+      headers: req.headers,
+      origin: req.headers.origin,
+    });
 
     // Format price as string with 2 decimal places
     const formatPrice = (price) => {
