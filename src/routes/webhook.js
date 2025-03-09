@@ -120,78 +120,124 @@ router.get('/callback', async (req, res) => {
 
 // Payment webhook endpoint
 router.post('/payment', validatePaymentRequest, async (req, res) => {
-  const {
-    order_id,
-    transaction_hash,
-    ada_amount,
-    usd_amount,
-    ada_price,
-    shipping_cost,
-  } = req.body;
-
   try {
-    console.log(`Processing payment for order ${order_id}`);
-    console.log(`Transaction hash: ${transaction_hash}`);
-    console.log(
-      `Amount: ${ada_amount} ADA (@ $${ada_price} per ADA) (${usd_amount} USD)`
-    );
+    const { order_id, transaction_hash, ada_amount, usd_amount, ada_price } =
+      req.body;
+
+    console.log('Processing payment:', {
+      order_id,
+      transaction_hash,
+      ada_amount,
+      usd_amount,
+      ada_price,
+    });
 
     // Verify the transaction on blockchain
+    console.log('Verifying transaction on blockchain...');
     const { valid, transaction } = await verifyTransaction(
       transaction_hash,
       ada_amount
     );
 
     if (!valid) {
-      console.error('Invalid payment detected');
+      console.error('Invalid payment detected:', {
+        expected: ada_amount,
+        transaction,
+      });
       return res
         .status(400)
         .json({ error: 'Invalid payment amount or address' });
     }
 
-    // Complete the draft order
-    const completedOrder = await shopify.draftOrder.complete(order_id);
-    console.log('Completed draft order:', completedOrder.id);
+    console.log('Transaction verified successfully');
 
-    // Update the order with payment details including shipping
-    const updatedOrder = await shopify.order.update(completedOrder.order_id, {
-      financial_status: 'paid',
-      note_attributes: [
-        {
-          name: 'cardano_transaction',
-          value: transaction_hash,
-        },
-        {
-          name: 'ada_amount',
-          value: ada_amount.toString(),
-        },
-        {
-          name: 'ada_price',
-          value: ada_price.toString(),
-        },
-        {
-          name: 'usd_amount',
-          value: usd_amount.toString(),
-        },
-        {
-          name: 'shipping_cost',
-          value: shipping_cost.toString(),
-        },
-      ],
-      tags: ['ADA Payment', 'Cardano'],
-    });
+    // Complete the draft order in Shopify
+    try {
+      console.log('Completing draft order in Shopify...');
+      const shopName = process.env.SHOPIFY_SHOP_NAME;
+      const accessToken = process.env.SHOPIFY_ACCESS_TOKEN;
 
-    console.log(
-      `Successfully processed payment for order ${completedOrder.order_id}`
-    );
-    return res.json({
-      success: true,
-      message: 'Payment verified and order completed',
-      order_id: completedOrder.order_id,
-      transaction_hash,
-    });
+      // First, complete the draft order
+      const completeResponse = await fetch(
+        `https://${shopName}/admin/api/2024-01/draft_orders/${order_id}/complete.json`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Shopify-Access-Token': accessToken,
+          },
+        }
+      );
+
+      if (!completeResponse.ok) {
+        const errorData = await completeResponse.json();
+        console.error('Failed to complete draft order:', errorData);
+        throw new Error(
+          `Failed to complete draft order: ${JSON.stringify(errorData)}`
+        );
+      }
+
+      const completedOrder = await completeResponse.json();
+      console.log('Draft order completed:', completedOrder);
+
+      // Then, update the order with payment details
+      const orderUpdateResponse = await fetch(
+        `https://${shopName}/admin/api/2024-01/orders/${completedOrder.order.id}.json`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Shopify-Access-Token': accessToken,
+          },
+          body: JSON.stringify({
+            order: {
+              id: completedOrder.order.id,
+              financial_status: 'paid',
+              note: `Paid with Cardano ADA\nTransaction Hash: ${transaction_hash}\nADA Amount: ${ada_amount}\nADA Price: $${ada_price}`,
+              note_attributes: [
+                {
+                  name: 'cardano_transaction',
+                  value: transaction_hash,
+                },
+                {
+                  name: 'ada_amount',
+                  value: ada_amount.toString(),
+                },
+                {
+                  name: 'ada_price',
+                  value: ada_price.toString(),
+                },
+                {
+                  name: 'usd_amount',
+                  value: usd_amount.toString(),
+                },
+              ],
+            },
+          }),
+        }
+      );
+
+      if (!orderUpdateResponse.ok) {
+        const errorData = await orderUpdateResponse.json();
+        console.error('Failed to update order:', errorData);
+        throw new Error(`Failed to update order: ${JSON.stringify(errorData)}`);
+      }
+
+      const updatedOrder = await orderUpdateResponse.json();
+      console.log('Order updated successfully:', updatedOrder);
+
+      return res.json({
+        success: true,
+        message: 'Payment verified and order completed',
+        order_id: completedOrder.order.id,
+        transaction_hash,
+      });
+    } catch (shopifyError) {
+      console.error('Shopify API error:', shopifyError);
+      throw shopifyError;
+    }
   } catch (error) {
-    console.error('Payment processing failed:', error);
+    console.error('Payment processing error:', error);
     res.status(500).json({
       error: 'Payment processing failed',
       details: error.message,
