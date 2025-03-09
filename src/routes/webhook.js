@@ -6,7 +6,7 @@ const cors = require('cors');
 
 // Backend URL constant
 // const BACKEND_URL = 'https://rq-backend-1a4371619f22.herokuapp.com';
-const BACKEND_URL = 'https://rq-staging-29d53091b9bf.herokuapp.com';
+const BACKEND_URL = 'http://rq-staging-29d53091b9bf.herokuapp.com';
 
 // Simple CORS configuration
 const corsOptions = {
