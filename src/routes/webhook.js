@@ -151,13 +151,35 @@ router.post('/payment', validatePaymentRequest, async (req, res) => {
 
     console.log('Transaction verified successfully');
 
-    // Complete the draft order in Shopify
     try {
       console.log('Completing draft order in Shopify...');
       const shopName = process.env.SHOPIFY_SHOP_NAME;
       const accessToken = process.env.SHOPIFY_ACCESS_TOKEN;
 
-      // First, complete the draft order
+      // First, check if the draft order exists
+      const checkResponse = await fetch(
+        `https://${shopName}/admin/api/2024-01/draft_orders/${order_id}.json`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Shopify-Access-Token': accessToken,
+          },
+        }
+      );
+
+      if (!checkResponse.ok) {
+        console.error(
+          'Draft order not found or error:',
+          await checkResponse.text()
+        );
+        return res.status(404).json({
+          error: 'Draft order not found or error',
+          order_id: order_id,
+        });
+      }
+
+      // Next, complete the draft order
       const completeResponse = await fetch(
         `https://${shopName}/admin/api/2024-01/draft_orders/${order_id}/complete.json`,
         {
@@ -170,15 +192,47 @@ router.post('/payment', validatePaymentRequest, async (req, res) => {
       );
 
       if (!completeResponse.ok) {
-        const errorData = await completeResponse.json();
+        const errorData = await completeResponse.text();
         console.error('Failed to complete draft order:', errorData);
-        throw new Error(
-          `Failed to complete draft order: ${JSON.stringify(errorData)}`
-        );
+        throw new Error(`Failed to complete draft order: ${errorData}`);
       }
 
-      const completedOrder = await completeResponse.json();
-      console.log('Draft order completed:', completedOrder);
+      const completedOrderText = await completeResponse.text();
+      console.log('Raw completed order response:', completedOrderText);
+
+      let completedOrder;
+      try {
+        completedOrder = JSON.parse(completedOrderText);
+      } catch (e) {
+        console.error('Failed to parse completed order JSON:', e);
+        return res.json({
+          success: true,
+          message: 'Payment verified but could not parse order details',
+          transaction_hash,
+        });
+      }
+
+      // Check if the response has the expected structure
+      if (
+        !completedOrder ||
+        !completedOrder.order ||
+        !completedOrder.order.id
+      ) {
+        console.error(
+          'Completed order missing expected structure:',
+          completedOrder
+        );
+        return res.json({
+          success: true,
+          message: 'Payment verified but order structure invalid',
+          transaction_hash,
+        });
+      }
+
+      console.log(
+        'Draft order completed successfully with order ID:',
+        completedOrder.order.id
+      );
 
       // Then, update the order with payment details
       const orderUpdateResponse = await fetch(
@@ -218,9 +272,15 @@ router.post('/payment', validatePaymentRequest, async (req, res) => {
       );
 
       if (!orderUpdateResponse.ok) {
-        const errorData = await orderUpdateResponse.json();
+        const errorData = await orderUpdateResponse.text();
         console.error('Failed to update order:', errorData);
-        throw new Error(`Failed to update order: ${JSON.stringify(errorData)}`);
+        // Even if updating fails, we can return success since the order was created
+        return res.json({
+          success: true,
+          message: 'Order created but failed to update details',
+          order_id: completedOrder.order.id,
+          transaction_hash,
+        });
       }
 
       const updatedOrder = await orderUpdateResponse.json();
