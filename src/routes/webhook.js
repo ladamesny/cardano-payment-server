@@ -8,49 +8,20 @@ const cors = require('cors');
 // const BACKEND_URL = 'https://rq-backend-1a4371619f22.herokuapp.com';
 const BACKEND_URL = 'https://rq-staging-29d53091b9bf.herokuapp.com';
 
-// Configure CORS with more specific options
+// Simple CORS configuration
 const corsOptions = {
-  origin: function (origin, callback) {
-    const allowedOrigins = [
-      'https://staging-rq.myshopify.com',
-      'https://checkout.shopify.com',
-      'https://rq-store.myshopify.com',
-      'http://localhost:3000',
-    ];
-
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      console.log('Origin not allowed by CORS:', origin);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: [
-    'Content-Type',
-    'Accept',
-    'Authorization',
-    'Origin',
-    'X-Requested-With',
-    'X-Shopify-Access-Token',
-    'shopify-access-token',
-    'x-shopify-shop-domain',
-  ],
-  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  origin: true, // Allow all origins for testing
   credentials: true,
-  maxAge: 86400,
-  preflightContinue: false,
-  optionsSuccessStatus: 204,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Accept'],
+  optionsSuccessStatus: 200,
 };
 
-// Apply CORS middleware to all routes
+// Apply CORS middleware first
 router.use(cors(corsOptions));
 
-// Specific handling for OPTIONS requests
-router.options('*', cors(corsOptions));
+// Parse JSON bodies
+router.use(express.json());
 
 const validatePaymentRequest = (req, res, next) => {
   // Middleware to validate request body
@@ -67,9 +38,13 @@ const validatePaymentRequest = (req, res, next) => {
 };
 
 // Add new draft order endpoint
-router.post('/create-draft-order', cors(corsOptions), async (req, res) => {
+router.post('/create-draft-order', async (req, res) => {
   try {
     const { cart, customer } = req.body;
+
+    // Add CORS headers explicitly
+    res.header('Access-Control-Allow-Origin', req.headers.origin);
+    res.header('Access-Control-Allow-Credentials', true);
 
     // Format price as string with 2 decimal places
     const formatPrice = (price) => {
