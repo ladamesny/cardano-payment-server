@@ -4,12 +4,13 @@ const shopify = require('../config/shopify');
 const { verifyTransaction } = require('../services/blockfrost');
 const cors = require('cors');
 
+// Backend URL constant
+// const BACKEND_URL = 'https://rq-backend-1a4371619f22.herokuapp.com';
+const BACKEND_URL = 'https://rq-staging-29d53091b9bf.herokuapp.com';
+
 // Configure CORS
 const corsOptions = {
-  origin: [
-    'https://rq-backend-1a4371619f22.herokuapp.com',
-    'http://localhost:3000',
-  ],
+  origin: [BACKEND_URL, 'http://localhost:3000'],
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Accept', 'Authorization'],
   credentials: true,
