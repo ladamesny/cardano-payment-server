@@ -8,19 +8,19 @@ const cors = require('cors');
 // const BACKEND_URL = 'https://rq-backend-1a4371619f22.herokuapp.com';
 const BACKEND_URL = 'https://rq-staging-29d53091b9bf.herokuapp.com';
 
-// Simple CORS configuration
+// CORS configuration
 const corsOptions = {
-  origin: true, // Allow all origins for testing
+  origin: 'https://staging-rq.myshopify.com',
   credentials: true,
   methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Accept'],
+  allowedHeaders: ['Content-Type', 'Accept', 'Origin', 'X-Requested-With'],
   optionsSuccessStatus: 200,
 };
 
-// Apply CORS middleware first
+// Apply CORS middleware first, before any routes
 router.use(cors(corsOptions));
 
-// Parse JSON bodies
+// Parse JSON bodies after CORS
 router.use(express.json());
 
 const validatePaymentRequest = (req, res, next) => {
@@ -41,10 +41,6 @@ const validatePaymentRequest = (req, res, next) => {
 router.post('/create-draft-order', async (req, res) => {
   try {
     const { cart, customer } = req.body;
-
-    // Add CORS headers explicitly
-    res.header('Access-Control-Allow-Origin', req.headers.origin);
-    res.header('Access-Control-Allow-Credentials', true);
 
     // Format price as string with 2 decimal places
     const formatPrice = (price) => {
