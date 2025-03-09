@@ -8,20 +8,62 @@ const cors = require('cors');
 // const BACKEND_URL = 'https://rq-backend-1a4371619f22.herokuapp.com';
 const BACKEND_URL = 'https://rq-staging-29d53091b9bf.herokuapp.com';
 
+// Debug middleware to log all requests
+router.use((req, res, next) => {
+  console.log('Incoming request:', {
+    method: req.method,
+    path: req.path,
+    origin: req.headers.origin,
+    headers: req.headers,
+  });
+  next();
+});
+
 // CORS configuration
 const corsOptions = {
-  origin: 'https://staging-rq.myshopify.com',
+  origin: function (origin, callback) {
+    console.log('Request origin:', origin);
+
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) {
+      console.log('No origin provided');
+      return callback(null, true);
+    }
+
+    const allowedOrigins = [
+      'https://staging-rq.myshopify.com',
+      'https://checkout.shopify.com',
+      'https://staging-rq.myshopify.com/pages/cardano-checkout',
+    ];
+
+    if (allowedOrigins.includes(origin) || origin.endsWith('.myshopify.com')) {
+      console.log('Origin allowed:', origin);
+      callback(null, true);
+    } else {
+      console.log('Origin not allowed:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Accept', 'Origin', 'X-Requested-With'],
+  exposedHeaders: ['Access-Control-Allow-Origin'],
+  maxAge: 86400,
   optionsSuccessStatus: 200,
 };
 
-// Apply CORS middleware first, before any routes
+// Apply CORS middleware first
 router.use(cors(corsOptions));
 
 // Parse JSON bodies after CORS
 router.use(express.json());
+
+// Add response headers middleware
+router.use((req, res, next) => {
+  // Ensure CORS headers are present on all responses
+  res.header('Access-Control-Allow-Credentials', 'true');
+  next();
+});
 
 const validatePaymentRequest = (req, res, next) => {
   // Middleware to validate request body
